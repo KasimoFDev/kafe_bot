@@ -53,46 +53,49 @@ const registerBotStart = (webAppUrl) => {
 // Automate Tunneling & Configuration
 const initApp = async () => {
   let webAppUrl = process.env.WEBAPP_URL || '';
+  let backendUrl = '';
 
+  // 1. Expose backend server (port 5000) ALWAYS
+  try {
+    console.log("Mahalliy API serverni localtunnel yordamida tashqi internetga ulash (HTTPS)...");
+    const backendTunnel = await localtunnel({ port: 5000 });
+    backendUrl = backendTunnel.url;
+    console.log(`Backend HTTPS tunnel URL: ${backendUrl}`);
+    
+    // Update frontend/.env with backend tunnel URL
+    try {
+      fs.writeFileSync('../frontend/.env', `VITE_API_URL="${backendUrl}"\n`);
+      console.log(`Frontend .env yangilandi (VITE_API_URL=${backendUrl})`);
+    } catch (fsErr) {
+      console.error('Frontend .env yozishda xatolik:', fsErr);
+    }
+
+    backendTunnel.on('close', () => console.log('Backend tunnel yopildi.'));
+  } catch (err) {
+    console.error('Backend localtunnel ishga tushirishda xatolik yuz berdi:', err);
+  }
+
+  // 2. Handle frontend/WebApp URL
   if (webAppUrl.startsWith('https://')) {
-    console.log(`Boshlang'ich WebApp URL ishlatilmoqda: ${webAppUrl}`);
+    console.log(`Boshlang'ich WebApp URL (Vercel) ishlatilmoqda: ${webAppUrl}`);
     registerBotStart(webAppUrl);
   } else {
+    // If not set, expose local frontend server (port 5173) using localtunnel
     try {
-      console.log("Mahalliy serverlarni localtunnel yordamida tashqi internetga ulash (HTTPS)...");
-      
-      // 1. Expose backend server (port 5000)
-      const backendTunnel = await localtunnel({ port: 5000 });
-      console.log(`Backend HTTPS tunnel URL: ${backendTunnel.url}`);
-      
-      // Update frontend/.env with backend tunnel URL
-      try {
-        fs.writeFileSync('../frontend/.env', `VITE_API_URL="${backendTunnel.url}"\n`);
-        console.log(`Frontend .env yangilandi (VITE_API_URL=${backendTunnel.url})`);
-      } catch (fsErr) {
-        console.error('Frontend .env yozishda xatolik:', fsErr);
-      }
-
-      // 2. Expose frontend server (port 5173)
       const frontendTunnel = await localtunnel({ port: 5173 });
       console.log(`Frontend HTTPS tunnel URL: ${frontendTunnel.url}`);
-      
       webAppUrl = frontendTunnel.url;
       
-      // Update backend/.env just to store it
+      // Update backend/.env to store it
       try {
         const envContent = `DATABASE_URL="postgresql://postgres:WhalexAI2026!@localhost:5432/pizza_db?schema=public"\nBOT_TOKEN="${botToken}"\nADMIN_ID="${process.env.ADMIN_ID}"\nWEBAPP_URL="${webAppUrl}"\nPORT=5000\n`;
         fs.writeFileSync('.env', envContent);
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) {}
 
       registerBotStart(webAppUrl);
-
-      backendTunnel.on('close', () => console.log('Backend tunnel yopildi.'));
       frontendTunnel.on('close', () => console.log('Frontend tunnel yopildi.'));
     } catch (err) {
-      console.error('localtunnel ishga tushirishda xatolik yuz berdi:', err);
+      console.error('Frontend localtunnel ishga tushirishda xatolik yuz berdi:', err);
       registerBotStart(webAppUrl || 'http://localhost:5173');
     }
   }
